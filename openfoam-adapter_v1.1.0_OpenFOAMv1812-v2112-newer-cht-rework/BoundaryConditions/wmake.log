@@ -1,0 +1,2 @@
+wmake libso .
+make: *** No rule to make target '/opt/openfoam9/src/OpenFOAM/lnInclude/int16.H', needed by 'Make/linux64GccDPInt32Opt/apiCoupledTemperature/apiCoupledTemperatureFvPatchScalarField.C.dep'.  Stop.

@@ -1,0 +1,4 @@
+SOURCE = \
+apiCoupledTemperature/apiCoupledTemperatureFvPatchScalarField.C \
+
+# sources

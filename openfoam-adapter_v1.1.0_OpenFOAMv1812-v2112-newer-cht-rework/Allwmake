@@ -1,0 +1,263 @@
+#!/bin/bash
+cd ${0%/*} || exit 1    # Run from this directory
+
+## detect openfoam vendor
+
+# OpenFOAM_VENDOR == 0: unknown
+# OpenFOAM_VENDOR == 1: .com
+# OpenFOAM_VENDOR == 2: .org
+[ -n "$OpenFOAM_VERSION_MINOR" ]     || export OpenFOAM_VERSION_MINOR=0;
+[ -n "$OpenFOAM_VERSION_REVISION" ]  || export OpenFOAM_VERSION_REVISION=0;
+
+if [[ "${WM_PROJECT_VERSION}" == "com" || "${WM_PROJECT_VERSION}" == "develop" ]] ; then
+    [ -n "$OpenFOAM_VENDOR"  ]       || export OpenFOAM_VENDOR=1;
+    [ -n "$OpenFOAM_VERSION" ]       || export OpenFOAM_VERSION=2147483647
+    [ -n "$OpenFOAM_VERSION_MAJOR" ] || export OpenFOAM_VERSION_MAJOR=2147483647
+
+elif [[ "${WM_PROJECT_VERSION}" == "dev" ]] ; then
+    [ -n "$OpenFOAM_VENDOR"  ]       || export OpenFOAM_VENDOR=2;
+    [ -n "$OpenFOAM_VERSION" ]       || export OpenFOAM_VERSION=2147483647
+    [ -n "$OpenFOAM_VERSION_MAJOR" ] || export OpenFOAM_VERSION_MAJOR=2147483647
+
+elif [[ "${WM_PROJECT_VERSION:0:1}" == "v" ]] ; then
+    [ -n "$OpenFOAM_VENDOR"  ]       || export OpenFOAM_VENDOR=1;
+    [ -n "$OpenFOAM_VERSION" ]       || export OpenFOAM_VERSION="${WM_PROJECT_VERSION:1}"
+    [ -n "$OpenFOAM_VERSION_MAJOR" ] || export OpenFOAM_VERSION_MAJOR="${OpenFOAM_VERSION}"
+else
+    [ -n "$OpenFOAM_VENDOR"  ]       || export OpenFOAM_VENDOR=2;
+    [ -n "$OpenFOAM_VERSION" ]       || export OpenFOAM_VERSION="${WM_PROJECT_VERSION}"
+    [ -n "$OpenFOAM_VERSION_MAJOR" ] || export OpenFOAM_VERSION_MAJOR=`echo $OpenFOAM_VERSION | cut -d. -f1`
+fi
+
+# check vendor selection with readme file
+if [ $OpenFOAM_VENDOR -eq 1 ] ; then
+    if [ $(grep -c "openfoam.com" $WM_PROJECT_DIR/README*) -le 3 ] ; then
+        exit -1;
+    fi
+elif [ $OpenFOAM_VENDOR -eq 2 ] ; then
+    if [ $(grep -c "openfoam.org" $WM_PROJECT_DIR/README*) -le 3 ] ; then
+        exit -2;
+    fi
+else
+    exit -3;
+fi
+
+
+########## CONFIGURATION - You may want to change these ########################
+# preCICE root path (should be already globally set)
+[ -n "$ADAPTER_PRECICE_ROOT" ] || export ADAPTER_PRECICE_ROOT="${PRECICE_ROOT}"
+
+#
+# openfoam vendor / version specific include and lib settings
+#
+if [ $OpenFOAM_VENDOR -eq 2 ] && [ $OpenFOAM_VERSION_MAJOR -ge 8 ] ; then
+#
+# OpenFOAM.org >= 8
+#
+export ADAPTER_EXE_INC_FLAGS=' \
+-I$(LIB_SRC)/ThermophysicalTransportModels/lnInclude \
+-I$(LIB_SRC)/MomentumTransportModels/momentumTransportModels/lnInclude \
+-I$(LIB_SRC)/MomentumTransportModels/compressible/lnInclude \
+-I$(LIB_SRC)/MomentumTransportModels/incompressible/lnInclude \
+-I$(LIB_SRC)/transportModels/lnInclude \
+'
+export ADAPTER_BC_EXE_INC_FLAGS=' \
+-I$(LIB_SRC)/ThermophysicalTransportModels/lnInclude \
+-I$(LIB_SRC)/radiationModels/lnInclude \
+'
+export ADAPTER_LIB_LIBS_FLAGS=' \
+-lthermophysicalTransportModels \
+-lfluidThermoMomentumTransportModels \
+-lincompressibleMomentumTransportModels \
+'
+export ADAPTER_BC_LIB_LIBS_FLAGS=' \
+-lthermophysicalTransportModels \
+'
+else
+#
+# OpenFOAM.org < 8
+# OpenFOAM.com
+#
+export ADAPTER_EXE_INC_FLAGS=' \
+-I$(LIB_SRC)/transportModels/ \
+-I$(LIB_SRC)/transportModels/incompressible/lnInclude \
+-I$(LIB_SRC)/transportModels/compressible/lnInclude \
+-I$(LIB_SRC)/transportModels/twoPhaseMixture/lnInclude \
+-I$(LIB_SRC)/transportModels/interfaceProperties/lnInclude \
+-I$(LIB_SRC)/transportModels/immiscibleIncompressibleTwoPhaseMixture/lnInclude \
+-I$(LIB_SRC)/TurbulenceModels/turbulenceModels/lnInclude \
+-I$(LIB_SRC)/TurbulenceModels/compressible/lnInclude \
+-I$(LIB_SRC)/TurbulenceModels/incompressible/lnInclude \
+'
+export ADAPTER_BC_EXE_INC_FLAGS=' \
+-I$(LIB_SRC)/TurbulenceModels/turbulenceModels/lnInclude \
+-I$(LIB_SRC)/TurbulenceModels/compressible/lnInclude \
+-I$(LIB_SRC)/thermophysicalModels/radiation/lnInclude \
+'
+export ADAPTER_LIB_LIBS_FLAGS=' \
+-lcompressibleTransportModels \
+-lcompressibleTurbulenceModels \
+-lincompressibleTurbulenceModels \
+-limmiscibleIncompressibleTwoPhaseMixture \
+'
+export ADAPTER_BC_LIB_LIBS_FLAGS=' \
+-lcompressibleTransportModels \
+-lcompressibleTurbulenceModels \
+'
+fi
+
+## preCICE as a static library?
+# If you use preCICE as a static library, then you also need to
+# specify its dependncies.
+# For an up-to-date list of dependencies,
+# look at https://github.com/precice/precice/wiki/Building
+# Uncomment to use preCICE as a static library: preCICE dependencies
+# ADAPTER_PRECICE_DEP="-lboost_system -lboost_filesystem -lboost_log -lboost_log_setup -lboost_thread -lboost_program_options -lpthread -lxml2"
+# ADAPTER_PRECICE_DEP="${ADAPTER_PRECICE_DEP} -lmpi_cxx"
+# ADAPTER_PRECICE_DEP="${ADAPTER_PRECICE_DEP} -lpetsc"
+# ADAPTER_PRECICE_DEP="${ADAPTER_PRECICE_DEP} -lpython2.7"
+
+# Optional: Preprocessor flags ("-DADAPTER_DEBUG_MODE" enables debug messages)
+[ -n "$ADAPTER_PREP_FLAGS" ] || ADAPTER_PREP_FLAGS="-DADAPTER_DEBUG_MODE"
+export ADAPTER_PREP_FLAGS="${ADAPTER_PREP_FLAGS} -DOpenFOAM_VENDOR=${OpenFOAM_VENDOR:-0} -DOpenFOAM_VERSION=${OpenFOAM_VERSION:-0} -DOpenFOAM_VERSION_MAJOR=${OpenFOAM_VERSION_MAJOR:-0} -DOpenFOAM_VERSION_MINOR=${OpenFOAM_VERSION_MINOR:-0} -DOpenFOAM_VERSION_REVISION=${OpenFOAM_VERSION_REVISION:-0}"
+
+# Optional: Flags used by wmake.
+# In order to compile with multiple threads, add e.g. "-j 4".
+# Make sure that these options are supported by your OpenFOAM version.
+[ -n "$ADAPTER_WMAKE_OPTIONS" ] || export ADAPTER_WMAKE_OPTIONS=""
+
+# Where should the adapter be built? Default: "${FOAM_USER_LIBBIN}"
+[ -n "$ADAPTER_TARGET_DIR" ] || export ADAPTER_TARGET_DIR="${FOAM_USER_LIBBIN}"
+
+# More information for compatibility with OpenFOAM
+DOC_COMPATIBILITY="https://github.com/precice/openfoam-adapter/wiki/Notes-on-OpenFOAM"
+
+################################################################################
+# Funtion to print to screen and copy to a logfile
+log () {
+    echo "$@" | tee -a "Allwmake.log"
+}
+################################################################################
+
+# Information header
+log "Building the OpenFOAM adapter for preCICE..."
+
+# What is going on here:
+# 1. get the colon-separated paths (e.g. the CPLUS_INCLUDE_PATH),
+# 2. translate all the colons to new line characters, i.e. move each entry to a new line,
+# 3. remove the empty lines. These would result from ":path" or "path:" or "path::path".
+# 4. add the respective "-I" or "-L" in the beginning of the line,
+# 5. translate the new line characters to "\", i.e. make everything again one line.
+
+# Extract the paths from the CPLUS_INCLUDE_PATH list and convert them to a sequence of "-I/path/ \"
+if [ "${CPLUS_INCLUDE_PATH}" ]; then
+    ADAPTER_GLOBAL_CPLUS_INC_PATHS=$(echo $CPLUS_INCLUDE_PATH | tr ':' '\n' |  sed '/^$/d' | sed 's/^/-I/' | tr '\n' ' \\')
+fi
+
+# Extract the paths from the LD_LIBRARY_PATH list and convert them to a sequence of "-L/path/ \"
+if [ "${LD_LIBRARY_PATH}" ]; then
+    ADAPTER_GLOBAL_LD_LIBRARY_PATHS=$(echo $LD_LIBRARY_PATH | tr ':' '\n' |  sed '/^$/d' | sed 's/^/-L/' | tr '\n' ' \\')
+fi
+
+# Extract the paths from the LIBRARY_PATH list and convert them to a sequence of "-L/path/ \"
+if [ "${LIBRARY_PATH}" ]; then
+    ADAPTER_GLOBAL_LIBRARY_PATHS=$(echo $LIBRARY_PATH | tr ':' '\n' |  sed '/^$/d' | sed 's/^/-L/' | tr '\n' ' \\')
+fi
+
+# Export the environment variables
+export ADAPTER_GLOBAL_CPLUS_INC_PATHS
+export ADAPTER_GLOBAL_LD_LIBRARY_PATHS
+export ADAPTER_GLOBAL_LIBRARY_PATHS
+export ADAPTER_PKG_CONFIG_CFLAGS="`pkg-config --silence-errors --cflags libprecice`"
+export ADAPTER_PKG_CONFIG_LIBS="`pkg-config --silence-errors --libs libprecice`"
+
+# Check if an OpenFOAM environment is available
+log ""
+log "Current OpenFOAM environment:"
+log "  WM_PROJECT = ${WM_PROJECT}"
+log "  WM_PROJECT_VERSION = ${WM_PROJECT_VERSION}"
+
+if [ -z "${WM_PROJECT}" ]; then
+    log ""
+    log "=== ERROR: It looks like no OpenFOAM environment is available. ==="
+    log "Possible reasons:"
+    log "- Have you loaded the OpenFOAM etc/bashrc file?"
+    log "- Are you using a compatible OpenFOAM version?"
+    log "  See ${DOC_COMPATIBILITY}"
+    exit 1
+fi
+# Check if this is a compatible OpenFOAM environment
+# For now, only check if it is not foam-extend, the main incompatible variant.
+if [ "${WM_PROJECT}" = "foam" ]; then
+    log ""
+    log "=== ERROR: foam-extend is not compatible with the adapter."
+    log "Make sure you are using a compatible OpenFOAM version:"
+    log "  ${DOC_COMPATIBILITY}"
+    exit 1
+fi
+
+log ""
+log "The adapter will be built into:"
+log "  ADAPTER_TARGET_DIR    = ${ADAPTER_TARGET_DIR}"
+log ""
+log "The following building options will be used:"
+log "  ADAPTER_PREP_FLAGS    = ${ADAPTER_PREP_FLAGS}"
+log "  ADAPTER_WMAKE_OPTIONS = ${ADAPTER_WMAKE_OPTIONS}"
+
+log ""
+log "Dependencies (preCICE) will be located using the following environment variables:"
+log "  ADAPTER_PRECICE_ROOT  = ${ADAPTER_PRECICE_ROOT}"
+if [ "${ADAPTER_PRECICE_DEP}" ]; then
+    log "      preCICE dependencies:"
+    log "      ADAPTER_PRECICE_DEP   = ${ADAPTER_PRECICE_DEP}"
+else
+    log "      preCICE dependencies: not specified (ok if preCICE is built as a shared library)"
+fi
+log "  ADAPTER_PKG_CONFIG_CFLAGS       = ${ADAPTER_PKG_CONFIG_CFLAGS}"
+log "  ADAPTER_PKG_CONFIG_LIBS         = ${ADAPTER_PKG_CONFIG_LIBS}"
+log "  ADAPTER_GLOBAL_CPLUS_INC_PATHS  = ${ADAPTER_GLOBAL_CPLUS_INC_PATHS}"
+log "  ADAPTER_GLOBAL_LD_LIBRARY_PATHS = ${ADAPTER_GLOBAL_LD_LIBRARY_PATHS}"
+log "  ADAPTER_GLOBAL_LIBRARY_PATHS    = ${ADAPTER_GLOBAL_LIBRARY_PATHS}"
+log "  ADAPTER_EXE_INC_FLAGS           = ${ADAPTER_EXE_INC_FLAGS}"
+log "  ADAPTER_BC_EXE_INC_FLAGS        = ${ADAPTER_BC_EXE_INC_FLAGS}"
+log "  ADAPTER_LIB_LIBS_FLAGS          = ${ADAPTER_LIB_LIBS_FLAGS}"
+log "  ADAPTER_BC_LIB_LIBS_FLAGS       = ${ADAPTER_BC_LIB_LIBS_FLAGS}"
+
+# Run wmake for boundary conditions
+log "build boundary conditions ..."
+cd BoundaryConditions
+./Allwmake
+if [ $? -ne 0 ] ; then
+    log "=== ERROR:  Building failed. See BoundaryConditions/wmake.log for more. ==="
+    exit 1
+fi
+cd ..
+
+# Run wmake (build the adapter) and check the exit code
+log ""
+log "Building with WMake (see the wmake.log log file)..."
+wmake ${ADAPTER_WMAKE_OPTIONS} libso > wmake.log 2>&1
+log ""
+if [ $? -ne 0 ] || [ "$(grep -c -E "error:" wmake.log)" -ne 0 ]; then
+    log "=== ERROR: Building failed. See wmake.log for more. ==="
+    log "Possible causes:"
+    log "- Make sure you are using a compatible version of the adapter for your OpenFOAM version:"
+    log "  ${DOC_COMPATIBILITY}"
+    log "- Is preCICE discoverable at compile time? Check the content of ADAPTER_PKG_CONFIG_CFLAGS above."
+    exit 1
+else
+    ADAPTER_WMAKE_UNDEFINED_SYMBOLS=$(grep -c -E "undefined|not defined" wmake.log)
+    ldd -r ${ADAPTER_TARGET_DIR}/libpreciceAdapterFunctionObject.so > ldd.log 2>&1
+    ADAPTER_LD_UNDEFINED_SYMBOLS=$(grep -c -E "undefined|not defined" ldd.log)
+    if [ "${ADAPTER_WMAKE_UNDEFINED_SYMBOLS}" -gt 0 ] || [ "${ADAPTER_LD_UNDEFINED_SYMBOLS}" -gt 0 ]; then
+        log "=== ERROR: Building completed with linking problems: there were undefined symbols. ==="
+        log "Possible causes:"
+        log "- Is preCICE discoverable at runtime? Check the content of ADAPTER_PKG_CONFIG_LIBS and ADAPTER_GLOBAL_LD_LIBRARY_PATHS above."
+        log "- If preCICE is (in purpose) only build as a static library, please set the ADAPTER_PRECICE_DEP in this script appropriately (see comments)."
+        log "See wmake.log and ldd.log for more details."
+        exit 1
+    else
+        log "=== OK: Building completed successfully! ==="
+        log "Next step: Run an example from the tutorials/ directory."
+    fi
+fi
